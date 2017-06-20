@@ -10,33 +10,42 @@ from keras.callbacks import LearningRateScheduler
 
 import os
 import numpy as np
-import cv2
+# import cv2
+from PIL import Image
 import matplotlib.pyplot as plt
 import tensorflow as tf
 
-minibatchSize = 50
+images = []
+folder = 'img_align_celeba'
+totalImages = len(os.listdir(folder))
+
+print("Reading CelebFaces")
+imagesList = os.listdir(folder)
+img = np.array(Image.open(os.path.join(folder, imagesList[0])))
+imRows = img.shape[0]
+imCols = img.shape[1]
+imChs = img.shape[2]
+desiredNumOfImages = 1000
+trainImages = np.zeros((desiredNumOfImages, imRows, imCols, imChs))
+for i, filename in enumerate(os.listdir(folder)):
+        if i>=desiredNumOfImages:
+            break
+        print(float(i)/desiredNumOfImages, end='\r')
+        # img = cv2.imread(os.path.join(folder,filename))/255.
+        img = np.array(Image.open(os.path.join(folder, filename)))/255.
+        if img is not None:
+            trainImages[i] = img
+
+print("Finished reading CelebFaces")
+
+
+# CNN - VGG Face SMALL
+
+minibatchSize = 5
 imageDim = 784
 hiddenDim = 512
 zDims = 2
 nEpochs = 10
-
-images = []
-folder = 'img_align_celeba'
-totalFiles = len(os.listdir(folder))
-print("Reading CelebFaces")
-for i, filename in enumerate(os.listdir(folder)):
-        print(float(i)/totalFiles, end='\r')
-        img = cv2.imread(os.path.join(folder,filename))/255.
-        if img is not None:
-            images.append(img)
-
-print("Finished reading CelebFaces")
-
-imRows = images[0].shape[0]
-imCols = images[0].shape[1]
-imChs = images[0].shape[2]
-
-# CNN - VGG Face SMALL
 
 # Q(z|X) -- encoder
 inputImg = Input(shape=(imRows, imCols, imChs,)) #image data format #218x178x3
@@ -118,5 +127,5 @@ def vaeLoss(y_true, y_pred):
 vae.compile(optimizer='adam', loss=vaeLoss)
 
 # Fit
-vae.fit(trainImages, trainImages, batch_size=minibatchSize, epochs=nEpochs)
+history = vae.fit(trainImages, trainImages, batch_size=minibatchSize, epochs=nEpochs)
 
