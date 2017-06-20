@@ -41,7 +41,7 @@ print("Finished reading CelebFaces")
 
 # CNN - VGG Face SMALL
 
-minibatchSize = 5
+minibatchSize = 10
 imageDim = 784
 hiddenDim = 512
 zDims = 2
@@ -58,7 +58,6 @@ x = MaxPooling2D(pool_size=(2, 2), strides=(2, 2), padding='valid')(x)          
 x = Conv2D(512, (3, 3), strides=(1, 1), padding='same', activation='relu')(x)   #27x22x512
 x = MaxPooling2D(pool_size=(2, 2), strides=(2, 2), padding='valid')(x)          #13x11x512
 x = Flatten()(x)                                                                #73216
-x = Dense(1024, activation='relu')(x)                                           #1024
 x = Dense(512, activation='relu')(x)                                            #512
 # z = Dense(2*zDims, activation='linear')(x)
 
@@ -80,8 +79,7 @@ z = Lambda(sampleZ, output_shape=(zDims,))([zMean, zLogSigmaSq])
 
 # VGG Face SMALL
 x = Dense(512, activation='relu')(z)                                            #512
-x = Dense(1024, activation='relu')(x)                                           #1024
-x = Dense(86016, activation='relu')(x)                                          #78848
+x = Dense(86016, activation='relu')(x)                                          #86016
 x = Reshape((14, 12, 512))(x)                                                   #14x12x512
 x = Conv2D(512, (3, 3), strides=(1, 1), padding='same', activation='relu')(x)   #14x12x512
 x = UpSampling2D(size=(2, 2))(x)                                                #28x24x512
@@ -100,8 +98,7 @@ vae = Model(inputImg, decodedImg)
 # Generator model, generate new data given latent variable z
 genInput = Input(shape=(zDims,))
 x = Dense(512, activation='relu')(genInput)                                     #512
-x = Dense(1024, activation='relu')(x)                                           #1024
-x = Dense(86016, activation='relu')(x)                                          #78848
+x = Dense(86016, activation='relu')(x)                                          #86016
 x = Reshape((14, 12, 512))(x)                                                   #14x12x512
 x = Conv2D(512, (3, 3), strides=(1, 1), padding='same', activation='relu')(x)   #14x12x512
 x = UpSampling2D(size=(2, 2))(x)                                                #28x24x512
