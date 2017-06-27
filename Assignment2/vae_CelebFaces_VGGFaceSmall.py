@@ -10,34 +10,75 @@ from keras.callbacks import LearningRateScheduler
 
 import os
 import numpy as np
+import struct
 # import cv2
 from PIL import Image
 import matplotlib.pyplot as plt
 import tensorflow as tf
 
-images = []
-folder = 'img_align_celeba'
-totalImages = len(os.listdir(folder))
+# images = []
+# folder = 'img_align_celeba'
+# totalImages = len(os.listdir(folder))
 
-print("Reading CelebFaces")
-imagesList = os.listdir(folder)
-img = np.array(Image.open(os.path.join(folder, imagesList[0])))
-imRows = img.shape[0]
-imCols = img.shape[1]
-imChs = img.shape[2]
-desiredNumOfImages = 1000
-trainImages = np.zeros((desiredNumOfImages, imRows, imCols, imChs))
-for i, filename in enumerate(os.listdir(folder)):
-        if i>=desiredNumOfImages:
-            break
-        print(float(i)/desiredNumOfImages, end='\r')
-        # img = cv2.imread(os.path.join(folder,filename))/255.
-        img = np.array(Image.open(os.path.join(folder, filename)))/255.
-        if img is not None:
-            trainImages[i] = img
+# print("Reading CelebFaces")
+# imagesList = os.listdir(folder)
+# img = np.array(Image.open(os.path.join(folder, imagesList[0])))
+# imRows = img.shape[0]
+# imCols = img.shape[1]
+# imChs = img.shape[2]
+# desiredNumOfImages = 1000
+# trainImages = np.zeros((desiredNumOfImages, imRows, imCols, imChs))
+# for i, filename in enumerate(os.listdir(folder)):
+#         if i>=desiredNumOfImages:
+#             break
+#         print(float(i)/desiredNumOfImages, end='\r')
+#         # img = cv2.imread(os.path.join(folder,filename))/255.
+#         img = np.array(Image.open(os.path.join(folder, filename)))/255.
+#         if img is not None:
+#             trainImages[i] = img
 
-print("Finished reading CelebFaces")
+# print("Finished reading CelebFaces")
 
+# Read training images
+fname_img = os.path.join('.', 'train-images-idx3-ubyte')
+with open(fname_img, 'rb') as fimg:
+    magic, num, rows, cols = struct.unpack(">IIII", fimg.read(16))
+    trainImages = np.fromfile(fimg, dtype=np.uint8).reshape(num, rows * cols)
+
+# Read training labels
+fname_lbl = os.path.join('.', 'train-labels-idx1-ubyte')
+with open(fname_lbl, 'rb') as flbl:
+    magic, num = struct.unpack(">II", flbl.read(8))
+    trainLbls = np.fromfile(flbl, dtype=np.int8)
+
+# Read test images
+fname_img = os.path.join('.', 't10k-images-idx3-ubyte')
+with open(fname_img, 'rb') as fimg:
+    magic, num, rows, cols = struct.unpack(">IIII", fimg.read(16))
+    testImages = np.fromfile(fimg, dtype=np.uint8).reshape(num, rows * cols)
+
+# Read test labels
+fname_lbl = os.path.join('.', 't10k-labels-idx1-ubyte')
+with open(fname_lbl, 'rb') as flbl:
+    magic, num = struct.unpack(">II", flbl.read(8))
+    testLbls = np.fromfile(flbl, dtype=np.int8)
+
+# Make it float and 0-centered
+trainImages = (trainImages.astype('float32') - 127.5) / 255.
+testImages = (testImages.astype('float32') - 127.5) / 255.
+
+# Make it 2D
+imageWidth = 28
+trainImages = np.reshape(
+    trainImages, (len(trainImages), imageWidth, imageWidth, 1))
+testImages = np.reshape(
+    testImages, (len(testImages), imageWidth, imageWidth, 1))
+
+# NETWORK
+
+minibatchSize = 128
+latentDim = 100
+genNumOfImages = 100
 
 # CNN - VGG Face SMALL
 
@@ -77,7 +118,8 @@ def sampleZ(args):
 # Sample z ~ Q(z|X)
 z = Lambda(sampleZ, output_shape=(zDims,))([zMean, zLogSigmaSq])
 
-# VGG Face SMALL
+
+
 x = Dense(512, activation='relu')(z)                                            #512
 x = Dense(86016, activation='relu')(x)                                          #86016
 x = Reshape((14, 12, 512))(x)                                                   #14x12x512
@@ -113,6 +155,33 @@ genOutput = Conv2D(3, (3, 3), strides=(1, 1), padding='valid', activation='linea
 
 generator = Model(genInput, genOutput)
 
+
+# Plot gen
+def plotGen(n=100, dim=(10, 10), figsize=(10, 10), showIm=True, saveIm=True, epoch=-1, genLatentVars=None):
+    if genLatentVars is None:
+        genLatentVars = np.zeros((n, latentDim))
+        for i in range(n):
+            genLatentVars[i] = np.random.uniform(-1, 1, latentDim)
+    generatedImages = generator.predict(genLatentVars)
+    plt.figure(figsize=figsize)
+    for i in range(generatedImages.shape[0]):
+        plt.subplot(dim[0], dim[1], i + 1)
+        img = np.reshape(generatedImages[i], (imageWidth, imageWidth))
+        plt.imshow(img, cmap='gray')
+        plt.axis('off')
+    plt.tight_layout()
+    if(saveIm):
+        plt.savefig('vae_MNIST_epoch%02d.png' % epoch)
+    if(showIm):
+        plt.show()
+
+genLatentVars = np.zeros((100, latentDim))
+for i in range(100):
+    genLatentVars[i] = np.random.uniform(-1, 1, latentDim)
+
+plotGen(showIm=False, saveIm=True, genLatentVars=genLatentVars)
+
+
 def vaeLoss(y_true, y_pred):
     # E[log P(X|z)]
     xent_loss = K.sum(K.binary_crossentropy(y_pred, y_true), axis=1)
@@ -125,4 +194,6 @@ vae.compile(optimizer='adam', loss=vaeLoss)
 
 # Fit
 history = vae.fit(trainImages, trainImages, batch_size=minibatchSize, epochs=nEpochs)
+
+
 

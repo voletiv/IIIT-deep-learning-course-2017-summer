@@ -43,9 +43,9 @@ with open(fname_lbl, 'rb') as flbl:
     magic, num = struct.unpack(">II", flbl.read(8))
     testLbls = np.fromfile(flbl, dtype=np.int8)
 
-# Make it float
-trainImages = trainImages.astype('float32') / 255.
-testImages = testImages.astype('float32') / 255.
+# Make it float and 0-centered
+trainImages = (trainImages.astype('float32')- 127.5) / 255.
+testImages = (testImages.astype('float32') - 127.5) / 255.
 
 # NETWORK
 
@@ -54,8 +54,6 @@ fitBatchSize = 128
 nEpochs = 10
 discImproveSteps = 1
 
-totalPixels = 784
-imageWidth = 28
 
 discHiddenDim = 128
 latentDim = 100
@@ -64,7 +62,7 @@ genHiddenDim = 128
 # Discriminator Net
 discInput = Input(shape=(totalPixels,))
 discHidden = Dense(discHiddenDim, activation='relu')(discInput)
-discOutput = Dense(1, activation='sigmoid')(discHidden)
+discOutput = Dense(1, activation='tanh')(discHidden)
 discriminator = Model(discInput, discOutput)
 
 # Discriminator Loss
@@ -189,67 +187,66 @@ def plotGen(n=16, dim=(4, 4), figsize=(10, 10)):
     plt.tight_layout()
     plt.show()
 
-# TRAIN
 
+# TRAIN
+trainImagesFullIdx = list(range(len(trainImages)))
 
 def trainForNEpochs(nEpochs, pltFreq=25):
     # For each epoch
     for e in tqdm(range(nEpochs)):
-        
+
         # TRAIN THE DISCRIMINATOR
-        
-        # For the number of steps of training discriminator per generator train
-        for k in range(discImproveSteps):
-            
-            # Select a random minibatch of real images
-            realImagesMinibatch = trainImages[np.random.randint(
-                0, len(trainImages), size=minibatchSize)]
-            
-            # Sample a minibatch-size of latent variables from noise prior
-            # (Gaussian)
-            latentVars = np.random.random((minibatchSize, latentDim))
-            
-            # Generate images from noise using the generator
-            fakeImagesMinibatch = generator.predict(latentVars)
-            
-            # Full list of training images input to discriminator
-            discTrainInputs = np.concatenate(
-                (realImagesMinibatch, fakeImagesMinibatch))
-            
-            # List of training image labels
-            discTrainLabels = np.zeros((2 * minibatchSize,))
-            
-            # Set label of real images as 2nd column
-            discTrainLabels[:minibatchSize] = 1
-            
-            # Shuffle the training images and labels
-            discTrainMiniIdx = list(range(2 * minibatchSize))
-            np.random.shuffle(discTrainMiniIdx)
-            discTrainInputs = discTrainInputs[discTrainMiniIdx]
-            discTrainLabels = discTrainLabels[discTrainMiniIdx]
-            
-            # Train the discriminator
-            makeTrainable(discriminator, True)
-            # discriminator.fit(discTrainInputs, discTrainLabels, batch_size=fitBatchSize, epochs=1)
-            dLoss = discriminator.train_on_batch(
-                discTrainInputs, discTrainLabels)
-            losses["d"].append(dLoss)
-            
-        # TRAIN THE GENERATOR via GAN
-        
+
+
+        # Select a random minibatch of real images
+        realImagesMinibatch = trainImages[np.random.randint(
+            0, len(trainImages), size=minibatchSize)]
+
         # Sample a minibatch-size of latent variables from noise prior
         # (Gaussian)
         latentVars = np.random.random((minibatchSize, latentDim))
-        
+
+        # Generate images from noise using the generator
+        fakeImagesMinibatch = generator.predict(latentVars)
+
+        # Full list of training images input to discriminator
+        discTrainInputs = np.concatenate(
+            (realImagesMinibatch, fakeImagesMinibatch))
+
+        # List of training image labels
+        discTrainLabels = np.zeros((2 * minibatchSize,))
+
+        # Set label of real images as 2nd column
+        discTrainLabels[:minibatchSize] = 1
+
+        # Shuffle the training images and labels
+        discTrainMiniIdx = list(range(2 * minibatchSize))
+        np.random.shuffle(discTrainMiniIdx)
+        discTrainInputs = discTrainInputs[discTrainMiniIdx]
+        discTrainLabels = discTrainLabels[discTrainMiniIdx]
+
+        # Train the discriminator
+        makeTrainable(discriminator, True)
+        # discriminator.fit(discTrainInputs, discTrainLabels, batch_size=fitBatchSize, epochs=1)
+        dLoss = discriminator.train_on_batch(
+            discTrainInputs, discTrainLabels)
+        losses["d"].append(dLoss)
+
+        # TRAIN THE GENERATOR via GAN
+
+        # Sample a minibatch-size of latent variables from noise prior
+        # (Gaussian)
+        latentVars = np.random.random((minibatchSize, latentDim))
+
         # Fake image labels)
         fakeImageLabels = np.ones((minibatchSize,))
-        
+
         # Train the Generato via GANr
         makeTrainable(discriminator, False)
         # GAN.fit(fakeImagesMinibatch, fakeImageLabels, batch_size=fitBatchSize, epochs=1)
         gLoss = GAN.train_on_batch(latentVars, fakeImageLabels)
         losses["g"].append(gLoss)
-        
+
         if e % pltFreq == pltFreq - 1:
             plotLosses(losses)
             plotGen()
